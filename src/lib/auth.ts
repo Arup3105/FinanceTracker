@@ -59,12 +59,20 @@ function createAuth() {
 
 type Auth = ReturnType<typeof createAuth>;
 
-const globalForAuth = globalThis as typeof globalThis & { __financeAuth?: Auth };
+const globalForAuth = globalThis as typeof globalThis & {
+  __financeAuth?: { auth: Auth; client: ReturnType<typeof getMongoClient> };
+};
 
-/** Lazily constructed so missing env vars surface as a clear runtime error, not a build failure. */
+/**
+ * Lazily constructed so missing env vars surface as a clear runtime error, not a build failure.
+ * Rebuilt whenever the MongoDB client is replaced, so auth never keeps a closed client.
+ */
 export function getAuth(): Auth {
-  globalForAuth.__financeAuth ??= createAuth();
-  return globalForAuth.__financeAuth;
+  const client = getMongoClient();
+  if (globalForAuth.__financeAuth?.client !== client) {
+    globalForAuth.__financeAuth = { auth: createAuth(), client };
+  }
+  return globalForAuth.__financeAuth.auth;
 }
 
 export type AuthSession = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;

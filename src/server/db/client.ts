@@ -12,13 +12,22 @@ const cache: MongoCache = (globalForMongo.__financeMongo ??= {});
 export function getMongoClient(): MongoClient {
   if (!cache.client) {
     const { MONGODB_URI } = getEnv();
-    cache.client = new MongoClient(MONGODB_URI, {
+    const client = new MongoClient(MONGODB_URI, {
       // Keep the pool small: Atlas free tier caps total connections per cluster.
       maxPoolSize: 10,
       maxIdleTimeMS: 60_000,
       serverSelectionTimeoutMS: 10_000,
       appName: "finance-tracker",
     });
+    // A failed first connection (e.g. Atlas IP access list) closes the client for good and every
+    // later call throws MongoTopologyClosedError. Drop it so the next request starts a fresh one.
+    client.on("topologyClosed", () => {
+      if (cache.client === client) {
+        cache.client = undefined;
+        cache.db = undefined;
+      }
+    });
+    cache.client = client;
   }
   return cache.client;
 }
