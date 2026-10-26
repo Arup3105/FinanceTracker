@@ -6,11 +6,28 @@ import { getEnv } from "@/lib/env";
 import { getDb, getMongoClient } from "@/server/db/client";
 import { deleteAllFinancialData } from "@/server/services/data-service";
 
+/**
+ * Origins Vercel assigns to this deployment (production domain, branch URL, deployment URL).
+ * Vercel sets these system variables itself, so they only ever name this project's own domains.
+ */
+function vercelOrigins(): string[] {
+  return [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL]
+    .filter((host): host is string => Boolean(host))
+    .map((host) => `https://${host}`);
+}
+
 function createAuth() {
   const env = getEnv();
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (process.env.VERCEL_ENV === "production" && productionHost && new URL(env.BETTER_AUTH_URL).host !== productionHost) {
+    console.warn(
+      `[config] BETTER_AUTH_URL is ${new URL(env.BETTER_AUTH_URL).origin}, but this deployment is served at https://${productionHost}. Set BETTER_AUTH_URL to https://${productionHost}.`,
+    );
+  }
   return betterAuth({
     appName: "Finance Tracker",
     baseURL: env.BETTER_AUTH_URL,
+    trustedOrigins: vercelOrigins(),
     secret: env.BETTER_AUTH_SECRET,
     // Passing the client enables MongoDB transactions inside the adapter (Atlas clusters are replica sets).
     database: mongodbAdapter(getDb(), { client: getMongoClient() }),
